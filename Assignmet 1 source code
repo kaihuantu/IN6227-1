@@ -1,0 +1,260 @@
+import numpy as np
+import pandas as pd
+import math
+import time
+from sklearn import datasets, preprocessing, model_selection, metrics
+from pprint import pprint
+import matplotlib.pyplot as plt
+
+
+class DecisionTreeClassifier():
+    
+    # initialize the Decision Tree Classifier with hyperparameters
+    def __init__(self, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None):
+        
+        # max depth of the tree
+        self.max_depth = max_depth
+        
+        # minimum number of samples required to split a node
+        self.min_samples_split = min_samples_split
+        
+        # minimum number of samples required to be at a leaf node
+        self.min_samples_leaf = min_samples_leaf
+        
+        # random state for generating random numbers
+        self.random_state = random_state
+
+
+# function to calculate the Gini Impurity
+    def gini_impurity(y):
+        
+        # total number of data points
+        total = len(y)
+        
+        # count the occurrences of each class
+        classes, counts = np.unique(y, return_counts=True)
+        
+        # calculate the gini impurity
+        gini = 1 - sum([(count/total)**2 for count in counts])
+        
+        return gini
+
+
+    # function to calculate the Information Gain
+    def information_gain(x, y, split_value):
+        
+        # split the data into two subsets based on the split value
+        left_subset = y[x <= split_value]
+        right_subset = y[x > split_value]
+        
+        # calculate the gini impurity for the left and right subsets
+        gini_left = gini_impurity(left_subset)
+        gini_right = gini_impurity(right_subset)
+        
+        # calculate the weighted gini impurity for the two subsets
+        gini_weighted = (len(left_subset)/len(y))*gini_left + (len(right_subset)/len(y))*gini_right
+        
+        # calculate the information gain
+        info_gain = gini_impurity(y) - gini_weighted
+        
+        return info_gain
+
+
+    # function to find the best split based on maximum information gain
+    def best_split(self, x, y):
+        
+        # initialize the best information gain and best split value
+        best_info_gain = 0
+        best_split_value = None
+        
+        # loop through all the features
+        for feature in range(x.shape[1]):
+            
+            # get the unique values in the feature
+            unique_values = np.unique(x[:, feature])
+            
+            # loop through all the unique values
+            for split_value in unique_values:
+                
+                # calculate the information gain for the current split value
+                info_gain = information_gain(x[:, feature], y, split_value)
+                
+                # update the best information gain and best split value
+                if info_gain > best_info_gain:
+                    best_info_gain = info_gain
+                    best_split_value = split_value
+                    
+        return best_info_gain, best_split_value
+
+
+    # function to split the data into left and right subsets based on a split value
+    def split_data(self, x, y, feature, split_value):
+        
+        # create two empty lists for the left and right subsets
+        left_subset = []
+        right_subset = []
+        
+        # loop through the data points
+        for i in range(len(x)):
+            
+            # if the current data point has a value less than or equal to the split value
+            # add it to the left subset, and its class to a separate list for labels
+            if x[i][feature] <= split_value:
+                left_subset.append(x[i])
+                left_labels.append(y[i])
+                
+            # if the current data point has a value greater than the split value
+            # add it to the right subset, and its class to a separate list for labels
+            else:
+                right_subset.append(x[i])
+                right_labels.append(y[i])
+                
+        # convert the subsets to numpy arrays
+        left_subset = np.array(left_subset)
+        right_subset = np.array(right_subset)
+        
+        # return the left and right subsets and their corresponding labels
+        return left_subset, right_subset, left_labels, right_labels
+
+
+    # function to get the most frequent class in a set of labels
+    def get_most_frequent_class(labels):
+        
+        # count the occurrences of unique classes
+        labels, counts = np.unique(labels, return_counts=True)
+        
+        # get the index of the most frequent class
+        max_index = np.argmax(counts)
+        
+        # return the most frequent class
+        return labels[max_index]
+
+
+    # function to train the Decision Tree Classifier
+    def train(self, x, y):
+        
+        # initialize the tree
+        self.tree = {}
+        
+        # initialize the queue to store the nodes in the tree
+        nodes = []
+        
+        # add the root node to the queue
+        nodes.append({'x': x, 'y': y, 'depth': 0})
+        
+        # loop through the nodes in the queue until all the nodes in the tree have been processed
+        while len(nodes) != 0:
+            
+            # get the current node
+            current_node = nodes[0]
+            
+            # get the data and labels for the current node
+            current_x = current_node['x']
+            current_y = current_node['y']
+            
+            # calculate the gini impurity for the current node
+            current_gini = gini_impurity(current_y)
+            
+            # if the node is pure or if the max depth has been reached, make it a leaf node
+            if current_gini == 0 or current_node['depth'] == self.max_depth:
+                
+                # add the most frequent class in the labels of the current node to the tree
+                self.tree[current_node] = get_most_frequent_class(current_y)
+                
+                # remove the processed node from the queue
+                del nodes[0]
+            
+            else:
+                
+                # get the best split value and information gain for the current node
+                best_info_gain, best_split_value = self.best_split(current_x, current_y)
+                
+                # if the information gain is 0, make this node a leaf node
+                if best_info_gain == 0:
+                    
+                    # add the most frequent class in the labels of the current node to the tree
+                    self.tree[current_node] = get_most_frequent_class(current_y)
+                    
+                    # remove the processed node from the queue
+                    del nodes[0]
+                
+                else:
+                    
+                    # get the left and right subsets and their corresponding labels
+                    left_subset, right_subset, left_labels, right_labels = self.split_data(current_x, current_y,
+                                                                                           best_split_feature, best_split_value)
+                    
+                    # add the left and right child nodes to the tree
+                    current_depth = current_node['depth'] + 1
+                    nodes.append({'x': left_subset, 'y': left_labels, 'depth': current_depth})
+                    nodes.append({'x': right_subset, 'y': right_labels, 'depth': current_depth})
+                    
+                    # remove the processed node from the queue
+                    del nodes[0]
+
+
+    # function to predict the class of an input data point using the trained decision tree
+    def predict(self, x):
+        
+        # loop through the nodes in the tree until a leaf node is reached
+        for node in self.tree:
+            
+            # if the node is a leaf node
+            if len(node)==1:
+                
+                # return the predicted class
+                return node[0]
+
+
+    # function to evaluate the accuracy of the predicted labels
+    def evaluate(y_true, y_pred):
+        
+        # calculate the accuracy score
+        accuracy = metrics.accuracy_score(y_true, y_pred)
+        
+        return accuracy
+
+
+# load the iris dataset
+iris = datasets.load_iris()
+
+# get the features and target variable from the dataset
+x = iris.data
+y = iris.target
+
+# encode the target variable to numeric
+le = preprocessing.LabelEncoder()
+y = le.fit_transform(y)
+
+
+# split the data into train and test sets
+x_train, x_test, y_train, y_test = model_selection.train_test_split(x, y, train_size=0.8, random_state=0)
+
+
+# instantiate the Decision Tree Classifier
+dtc = DecisionTreeClassifier()
+
+# train the decision tree on the training data
+start_time = time.time()
+dtc.train(x_train, y_train)
+end_time = time.time()
+time_taken = end_time - start_time
+print("Time taken to train the Decision Tree Classifier:", time_taken)
+
+
+# make predictions on the test data
+y_pred = [dtc.predict(data_point) for data_point in x_test]
+
+# calculate the accuracy of the trained model
+accuracy = evaluate(y_test, y_pred)
+print("Accuracy of the Decision Tree Classifier:", accuracy)
+
+# visualize the decision tree
+pprint(dtc.tree)
+plt.figure(figsize=(20,10))
+plt.plot()
+plt.title("Decision Tree Classifier")
+plt.scatter(x['petal length (cm)'], x['petal width (cm)'], c=y, cmap='viridis')
+plt.xlabel("Petal Length (cm)")
+plt.ylabel("Petal Width (cm)")
+plt.show()
